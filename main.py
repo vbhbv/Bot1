@@ -8,18 +8,22 @@ import sys
 import json 
 import threading 
 
-# 🚨 استيراد جميع الدوال من ملف التحميل الخارجي
+# 🚨 استيراد الدوال الأساسية من ملف التحميل
 from handlers.download import download_media_yt_dlp, load_links, save_links
+
+# 🚨 استيراد ابتكارات UX الجديدة (الميزتان 3 و 24)
+from innovations import get_random_loading_message, send_personalized_thank_you 
 
 # ===============================================
 #              0. الإعدادات والثوابت والتهيئة
 # ===============================================
 
+# قراءة المتغيرات البيئية من Railway
 BOT_TOKEN = os.getenv("BOT_TOKEN") 
 WEBHOOK_URL_BASE = os.getenv("WEBHOOK_URL") 
 WEBHOOK_URL_PATH = "/{}".format(BOT_TOKEN) 
 
-CHANNEL_USERNAME = "@SuPeRx1" # يُفضل وضعه كمتغير بيئي أيضاً
+CHANNEL_USERNAME = "@SuPeRx1"
 
 # التهيئة
 try:
@@ -41,7 +45,7 @@ def webhook():
             update = telebot.types.Update.de_json(json_string)
             bot.process_new_updates([update])
         except Exception as e:
-            print(f"❌ خطأ حرج في معالجة Webhook: {e}")
+            print(f"❌ خطأ حرج في معالجة Webhook: {e}") 
         return '', 200 
     else:
         return 'Error', 403
@@ -53,12 +57,15 @@ def webhook():
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     first_name = message.from_user.first_name if message.from_user else "صديقنا"
+    
+    # 💡 استخدام الواجهة القديمة مؤقتاً حتى نطور الواجهة المبتكرة
     markup = types.InlineKeyboardMarkup(row_width=2)
     tt_btn = types.InlineKeyboardButton("تحميل تيك توك 🎶", callback_data="download_tiktok")
     ig_btn = types.InlineKeyboardButton("تحميل إنستجرام 📸", callback_data="download_instagram")
     yt_btn = types.InlineKeyboardButton("تحميل يوتيوب ▶️", callback_data="download_youtube")
     dev_btn = types.InlineKeyboardButton("المطور 👨‍💻", url="https://t.me/yourusername") 
     markup.add(tt_btn, ig_btn, yt_btn, dev_btn)
+    
     bot.send_message(
         message.chat.id,
         f"""<b>مرحباً بك {first_name}!</b> 👋
@@ -133,10 +140,21 @@ def process_user_link(message):
             return
             
         # 4. بدء عملية التحميل المباشر لـ تيك توك وإنستجرام (فيديو فقط)
-        loading_msg = bot.send_message(message.chat.id, f"<strong>⏳ جارٍ التحميل المباشر من {platform_name} (فيديو)...</strong>", parse_mode="html")
+        
+        # 💡 الميزة 3: استخدام رسالة التحميل العشوائية
+        loading_message_text = get_random_loading_message(platform_name)
+        loading_msg = bot.send_message(
+            message.chat.id, 
+            loading_message_text, 
+            parse_mode="Markdown" # تم التغيير من HTML إلى Markdown
+        )
         
         # 🚨 استدعاء الدالة من الملف الخارجي (handlers/download.py)
         download_media_yt_dlp(bot, message.chat.id, user_url, platform_name, loading_msg.message_id, download_as_mp3=False)
+        
+        # 💡 الميزة 24: إرسال رسالة شكر مخصصة بعد النجاح
+        user_first_name = message.from_user.first_name if message.from_user else "صديقنا"
+        send_personalized_thank_you(bot, message.chat.id, user_first_name)
             
     except Exception as e:
         # 5. معالجة الأخطاء
@@ -186,12 +204,13 @@ def handle_final_download(call):
     download_as_mp3 = (media_type == 'audio')
     
     try:
-        # 1. تحديث رسالة التحميل
+        # 1. تحديث رسالة التحميل (باستخدام الابتكار)
+        loading_message_text = get_random_loading_message(platform_name)
         bot.edit_message_text(
             chat_id=call.message.chat.id,
             message_id=call.message.message_id,
-            text=f"<b>⏳ جارٍ التحميل/التحويل من {platform_name} ({media_type.upper()})...</b>",
-            parse_mode='HTML'
+            text=loading_message_text,
+            parse_mode='Markdown'
         )
         
         # 2. استدعاء دالة التنزيل المتخصصة
@@ -203,6 +222,10 @@ def handle_final_download(call):
             call.message.message_id,
             download_as_mp3
         )
+        
+        # 💡 الميزة 24: إرسال رسالة شكر مخصصة بعد النجاح
+        user_first_name = call.from_user.first_name if call.from_user else "صديقنا"
+        send_personalized_thank_you(bot, call.message.chat.id, user_first_name)
         
     except Exception as e:
         # 3. معالجة الأخطاء
@@ -221,6 +244,12 @@ def handle_final_download(call):
 # ===============================================
 
 if __name__ == '__main__':
-    bot.remove_webhook()
+    # 🚨 محاولة إزالة Webhook بطريقة أكثر استقراراً
+    try:
+        bot.remove_webhook()
+    except Exception as e:
+        print(f"❌ فشل إزالة Webhook. قد يكون غير مسجل مسبقاً: {e}")
+        
+    # تسجيل الـ Webhook الجديد
     bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH)
     print('✅ البوت جاهز للتشغيل بواسطة Gunicorn...')
