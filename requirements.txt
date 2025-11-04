@@ -1,0 +1,4 @@
+pytelegrambotapi
+flask
+gunicorn
+yt-dlp
